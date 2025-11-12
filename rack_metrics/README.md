@@ -1,39 +1,145 @@
-# RackMetrics
+# Проєкт "Rack-метрики"
 
-TODO: Delete this and the text below, and describe your gem
+* **Виконав:** Малютін Максим
 
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/rack_metrics`. To experiment with that code, run `bin/console` for an interactive prompt.
+## 1. Опис реалізації
 
-## Installation
+Проєкт реалізовано у вигляді Ruby-гема `rack_metrics`.
 
-TODO: Replace `UPDATE_WITH_YOUR_GEM_NAME_PRIOR_TO_RELEASE_TO_RUBYGEMS_ORG` with your gem name right after releasing it to RubyGems.org. Please do not do it earlier due to security reasons. Alternatively, replace this section with instructions to install your gem from git if you don't plan to release to RubyGems.org.
+* **`lib/rack_metrics/middleware.rb`**: Ядро гема. Це клас Rack Middleware, який перехоплює кожен запит, вимірює час його виконання (`Process.clock_gettime`), аналізує статус відповіді та її розмір (`Content-Length`).
+* **`lib/rack_metrics/registry.rb`**: Потоко-безпечний (thread-safe, з використанням `Mutex`) клас-сховище, який акумулює всі метрики. Він підраховує загальну кількість запитів, групує їх за статус-кодами (2xx, 4xx, 5xx) та розподіляє дані про латентність і розмір по "кошиках" (гістограмах).
+* Middleware також автоматично відкриває ендпоінт `/metrics` (у демо-версії він змінений на `/my_custom_metrics`), який віддає поточні метрики у текстовому форматі.
 
-Install the gem and add to the application's Gemfile by executing:
+## 2. Системні вимоги
 
-    $ bundle add UPDATE_WITH_YOUR_GEM_NAME_PRIOR_TO_RELEASE_TO_RUBYGEMS_ORG
+Для запуску проєкту необхідні:
+1.  **Ruby** (версія 2.6 або вище)
+2.  **Bundler** (`gem install bundler`)
+3.  **Інструменти для збірки** (оскільки деякі геми мають C-розширення).
 
-If bundler is not being used to manage dependencies, install the gem by executing:
+Для систем на базі Ubuntu/Debian (включаючи WSL) виконайте:
+```bash
+sudo apt update
+sudo apt install build-essential ruby-dev
+````
 
-    $ gem install UPDATE_WITH_YOUR_GEM_NAME_PRIOR_TO_RELEASE_TO_RUBYGEMS_ORG
+## 3\. Як запустити та перевірити
 
-## Usage
+Є два способи перевірити працездатність гема: запустити демо-додаток або запустити тести.
 
-TODO: Write usage instructions here
+### A. Запуск Демонстраційного Додатку (Sinatra + Puma)
 
-## Development
+Цей спосіб показує гем у реальних умовах.
 
-After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
+**1. Встановлення залежностей:**
 
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and the created tag, and push the `.gem` file to [rubygems.org](https://rubygems.org).
+Перейдіть до папки проєкту та встановіть геми локально:
 
-## Contributing
+```bash
+# Перехід у папку гема
+cd rack_metrics
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/rack_metrics. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [code of conduct](https://github.com/[USERNAME]/rack_metrics/blob/master/CODE_OF_CONDUCT.md).
+# Налаштування локальної інсталяції гемів
+bundle config set --local path 'vendor/bundle'
 
-## License
+# Встановлення
+bundle install
+```
 
-The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
+**2. Створення "ярликів" для запуску:**
 
-## Code of Conduct
+Щоб уникнути конфліктів `bundle exec`, створимо локальні файли для запуску:
 
-Everyone interacting in the RackMetrics project's codebases, issue trackers, chat rooms and mailing lists is expected to follow the [code of conduct](https://github.com/[USERNAME]/rack_metrics/blob/master/CODE_OF_CONDUCT.md).
+```bash
+bundle binstubs rspec-core
+bundle binstubs puma
+```
+
+**3. Запуск демо-сервера:**
+
+Файл `config.ru` у корені проєкту описує простий додаток Sinatra, "обгорнутий" нашим middleware `RackMetrics::Middleware`.
+
+```bash
+# Запускаємо сервер Puma
+./bin/puma
+```
+
+Ви маєте побачити: `Listening on tcp://0.0.0.0:9292`
+
+**4. Генерація трафіку:**
+
+Відкрийте **новий термінал** (не закриваючи сервер) і виконайте кілька запитів до різних сторінок:
+
+```bash
+# 1. Швидкий запит
+curl http://localhost:9292/
+
+# 2. Повільний запит (300ms)
+curl http://localhost:9292/slow
+
+# 3. Запит з великою відповіддю (20KB)
+curl http://localhost:9292/big
+
+# 4. Запит з помилкою 500
+curl http://localhost:9292/error
+```
+
+**5. Перегляд метрик:**
+
+Тепер зробіть запит до спеціального шляху `/my_custom_metrics`, який обробляється нашим гемом:
+
+```bash
+curl http://localhost:9292/my_custom_metrics
+```
+
+**Очікуваний результат:**
+Ви побачите звіт, який зібрав гем (точні цифри можуть відрізнятися):
+
+```
+requests_total: 5
+status_codes_2xx: 4
+status_codes_3xx: 0
+status_codes_4xx: 0
+status_codes_5xx: 1
+
+# Latency Histogram (ms)
+latency_le_10: 2
+latency_le_50: 1
+...
+latency_le_500: 2
+...
+
+# Response Size Histogram (bytes)
+size_le_100: 3
+...
+size_le_102400: 1
+...
+```
+
+### B. Запуск Тестів (RSpec)
+
+Для перевірки коректності логіки гема можна запустити автоматизовані тести.
+
+**1. Переконайтеся, що ви виконали крок 1 та 2** (встановлення залежностей та створення `binstubs`).
+
+**2. Запустіть RSpec:**
+
+```bash
+./bin/rspec
+```
+
+**Очікуваний результат:**
+Усі тести мають пройти успішно.
+
+```
+RackMetrics::Middleware
+  повертає правильний статус та тіло (просто перевірка)
+  рахує загальну кількість запитів
+  рахує статуси 2xx
+  записує латентність у правильний кошик
+  записує розмір у правильний кошик
+  показує метрики на шляху /metrics
+
+Finished in 0.43581 seconds (files took 11.42 seconds to load)
+6 examples, 0 failures
+```
