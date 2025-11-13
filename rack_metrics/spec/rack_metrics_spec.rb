@@ -1,6 +1,3 @@
-# spec/rack_metrics_spec.rb
-# frozen_string_literal: true
-
 require 'rack/test'
 require 'rack_metrics/registry'
 require 'rack_metrics/middleware'
@@ -8,28 +5,20 @@ require 'rack_metrics/middleware'
 RSpec.describe RackMetrics::Middleware do
   include Rack::Test::Methods
 
-  # 1. Створюємо "піддослідний" додаток
-  # ---- ВИПРАВЛЕНО ТУТ ----
   let(:test_app) do
-    # Це простий Rack-додаток (lambda)
+
     lambda { |_env| [200, { 'Content-Length' => '5' }, ['Hello']] }
   end
 
-  # 2. Створюємо "повільний" додаток
   let(:slow_app) do
     lambda { |_env| sleep 0.06; [200, { 'Content-Length' => '4' }, ['Slow']] }
   end
 
-  # 3. Створюємо наш реєстр
   let(:registry) { RackMetrics::Registry.new }
   
-  # 4. Створюємо наше middleware
-  # ---- ТА ВИПРАВЛЕНО ТУТ ----
   let(:middleware) { RackMetrics::Middleware.new(test_app, registry: registry) }
   let(:slow_middleware) { RackMetrics::Middleware.new(slow_app, registry: registry) }
 
-  # 5. `app` - це спеціальний метод для `rack-test`. 
-  # Тепер він не конфліктує з `let(:test_app)`
   def app
     middleware
   end
@@ -53,7 +42,6 @@ RSpec.describe RackMetrics::Middleware do
   end
 
   it "записує латентність у правильний кошик" do
-    # Тут ми локально перевизначаємо `app`, що є нормальним
     def app
       slow_middleware
     end
@@ -65,7 +53,7 @@ RSpec.describe RackMetrics::Middleware do
   end
 
   it "записує розмір у правильний кошик" do
-    get '/' # 'Hello' (5 байт)
+    get '/'
     expect(registry.to_s).to include("size_le_100: 1")
   end
 
