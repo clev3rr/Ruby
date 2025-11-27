@@ -1,6 +1,3 @@
-# spec/rack_metrics_spec.rb
-# frozen_string_literal: true
-
 require 'rack/test'
 require 'rack_metrics/registry'
 require 'rack_metrics/middleware'
@@ -9,6 +6,7 @@ RSpec.describe RackMetrics::Middleware do
   include Rack::Test::Methods
 
   let(:test_app) do
+
     lambda { |_env| [200, { 'Content-Length' => '5' }, ['Hello']] }
   end
 
@@ -55,7 +53,7 @@ RSpec.describe RackMetrics::Middleware do
   end
 
   it "записує розмір у правильний кошик" do
-    get '/' 
+    get '/' # 'Hello' (5 байт)
     expect(registry.to_s).to include("size_le_100: 1")
   end
 
@@ -65,5 +63,3 @@ RSpec.describe RackMetrics::Middleware do
     expect(last_response.body).to include("requests_total: 0")
   end
 end
-
-
